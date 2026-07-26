@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: furseal
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bifrost
+  namespace: furseal
+  labels:
+    app: bifrost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bifrost
+  template:
+    metadata:
+      labels:
+        app: bifrost
+    spec:
+      containers:
+        - name: bifrost
+          image: maximhq/bifrost:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2048Mi"
+          volumeMounts:
+            - name: bifrost-data
+              mountPath: /app/data
+      volumes:
+        - name: bifrost-data
+          hostPath:
+            path: /mnt/workspaces/bifrost/data
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bifrost
+  namespace: furseal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: bifrost
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bifrost
+  namespace: furseal
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: bifrost.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bifrost
+                port:
+                  number: 8080
