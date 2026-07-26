@@ -1,7 +1,15 @@
 apiVersion: v1
-kind: Namespace
+kind: Service
 metadata:
-  name: furseal
+  name: bifrost
+  namespace: furseal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: bifrost
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,19 +50,6 @@ spec:
           hostPath:
             path: /mnt/workspaces/bifrost/data
             type: DirectoryOrCreate
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: bifrost
-  namespace: furseal
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8080
-      targetPort: 8080
-  selector:
-    app: bifrost
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
