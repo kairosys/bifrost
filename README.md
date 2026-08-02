@@ -1,185 +1,245 @@
-# Bifrost AI Gateway
+<h1 align="center">Bifrost AI Gateway</h1>
+<p align="center">
+  <strong>OpenAI-compatible AI gateway that routes LLM traffic from every client to local and cloud model backends on a Kubernetes cluster.</strong>
+  <br />
+  <em>Central proxy · Model routing &amp; failover · Kind / Kubernetes · SQLite persistence</em>
+</p>
 
-Bifrost is the **central AI traffic gateway** and OpenAI-compatible proxy for the
-workspace. It sits at the front of the stack on a Kind Kubernetes cluster (Mac Studio)
-and intercepts/transforms LLM API calls from every client — Open WebUI, OpenCode,
-programmatic agents, and IDEs — then routes them to one or more backends:
+<p align="center">
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-4CAF50?style=for-the-badge" alt="Quick Start" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" /></a>
+</p>
 
-- Local model backend (e.g. **Ollama** running natively on the Mac Studio host)
-- Cloud model providers
+<p align="center">
+  <a href="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white"><img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white" alt="Kubernetes" /></a>
+  <a href="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white"><img src="https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white" alt="Nginx" /></a>
+  <a href="https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white"><img src="https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white" alt="SQLite" /></a>
+  <a href="https://img.shields.io/badge/OpenAI--compatible-412991?style=flat&logo=openai&logoColor=white"><img src="https://img.shields.io/badge/OpenAI--compatible-412991?style=flat&logo=openai&logoColor=white" alt="OpenAI-compatible" /></a>
+</p>
 
-At a glance: failover + model fallback, unified API-key management, rate limiting, and
-asynchronous tracing via Langfuse. Nothing in this repository is application code; it ships only Kubernetes manifests and generated runtime data. See [`AGENTS.md`](./AGENTS.md) for agent/operator constraints (especially the hostPath/data-disk gotcha).
+<p align="center">
+  <a href="https://img.shields.io/badge/Claude_Code-D97757?style=flat&logo=claude&logoColor=white"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat&logo=claude&logoColor=white" alt="Claude Code" /></a>
+  <a href="https://img.shields.io/badge/GitHub_Copilot-000000?style=flat&logo=github&logoColor=white"><img src="https://img.shields.io/badge/GitHub_Copilot-000000?style=flat&logo=github&logoColor=white" alt="GitHub Copilot" /></a>
+  <a href="https://img.shields.io/badge/Cursor-000000?style=flat&logo=cursor&logoColor=white"><img src="https://img.shields.io/badge/Cursor-000000?style=flat&logo=cursor&logoColor=white" alt="Cursor" /></a>
+</p>
 
 ---
 
-## Architecture & Request Flow
+Bifrost is the central AI traffic gateway for this workspace. It sits at the front of the stack on a Kind Kubernetes cluster, intercepts LLM API calls from every client — Open WebUI, OpenCode, programmatic agents, and IDEs — and routes them to one or more backends, including local models (e.g. Ollama on the host) and cloud model providers.
 
-```mermaid
-flowchart LR
-  subgraph Clients["Clients"""]; webui["Open WebUI"]; oc["OpenCode / AI Agents"]; ide["IDE Integrations"]
-    end
+This repository ships no application code. It contains only the Kubernetes manifest that runs the `maximhq/bifrost` gateway image plus generated runtime data. See [`AGENTS.md`](./AGENTS.md) for the agent/operator constraints that apply to this workspace.
 
-  subgraph Cluster["Default Namespace (Kind, Mac Studio)"]
-    bgw["Bifrost Gateway :8080"]
-    svc["Service: bifrost"]
-    webui --> bgw; oc --> bgw; ide --> bgw
-    bgw <--> svc
-  end
+## Features
 
-  subgraph Backends["Backends"]
-    ollama["Local Backend (Ollama)"]
-    cloud["Cloud Providers"]
-  end
+| Feature | Description |
+|---|---|
+| OpenAI-compatible proxy | Serves the `/v1` surface exactly, so any OpenAI SDK or client works unchanged |
+| Central routing | One ingress point for all clients, backed by a single Service/Deployment |
+| Failover & model fallback | Requests route to alternate backends when the primary model is unavailable |
+| Rate limiting | Per-client limits enforced at the gateway |
+| Unified key management | Single place to manage API keys for all downstream backends |
+| Async tracing | Request traces exported to Langfuse |
 
-  svc --/v1 requests--> Backends
+## Quick Start
+
+### Prerequisites
+
+- macOS with Docker Desktop and a Kind cluster named `kind`
+- A reachable model backend (e.g. Ollama running on the host, reachable from inside the cluster)
+- Optional: nginx Ingress controller installed on the cluster for the `bifrost.localhost` host
+
+### 1. Pre-seed the hostPath directory
+
+The pod mounts `/app/data` from the node path `/mnt/workspaces/bifrost/data`. New Kind nodes will not have this path — create it before applying, otherwise the gateway has nowhere to write config and logs:
+
+```bash
+mkdir -p /mnt/workspaces/bifrost/data/logs
 ```
 
+### 2. Apply the manifest
 
-## Runtime Data (read me; this bites agents)
-
-Key operational facts pulled directly from `k8s/bifrost-deployment.yaml`:
-
-| Resource               | Value                          | Source in manifest |
-|------------------------|--------------------------------|--------------------|
-| Container port (name)  | `http` on **8080**             | line 27–29         |
-| Service                | ClusterIP, `port: 8080`, `targetPort: 8080` | line 54          |
-| Images (current)      | `maximhq/bifrost:latest`       | line 25            |
-| Pod               | default namespace, 1 replica     | lines 3–10, 13      |
-
----
-
-## Repository Layout
-
-```text
-bifrost/
-├── .gitignore          # ignores everything under data/*.db* and WAL/SHM sidecars
-├── data/               # runtime-generated; see “Runtime Data” below (hostPath-backed)
-│   └── logs/           # MUST stay writable for gateway log output
-└── k8s/                # single source of Kubernetes truth for this workspace
-      └── bifrost-deployment.yaml   Deployment, Service, Ingress
-```
-
-`k8s/` file map: everything — the `bifrost` Deployment (image, resources, hostPath volumeMount at `/app/data`),
-the Service (port/targetPort **8080**), and an nginx Ingress (`bifrost.localhost`). No Namespace object is declared; resources land in whatever namespace your kubectl context targets.
-
----
-
-## Runtime Data (read me; this bites agents)
-
-The container declares a `hostPath` mount that the agent must understand:
-
-```yaml
-# from k8s/bifrost-deployment.yaml
-volumeMounts: [{name: bifrost-data, mountPath: /app/data}]
-volumes:      [{name: bifrost-data, hostPath: {path: "/mnt/workspaces/bifrost/data", type: DirectoryOrCreate}}]
-```
-
-Implications for any agent/operator working in this repo:
-
-- The node directory `/mnt/workspaces/bifrost/data` must exist (or be created) before `kubectl apply`. New Kind nodes will **not** have it. Use the exact emptyDir-equivalent or pre-seed that path — there is no `.env`, no init container, and none of this repo’s files populate real content into Git.
-- Live state lives on each cluster node, not here: `config.db` (26 MB) and a **~189 MB** `logs.db` live under `./data/`, ignored by `.gitignore`. All persistence is host-local; back it up there or face data loss between redeploy/host-restart.
-- Do not edit any `*.db`, `-wal`, `-shm` file with the process running (SQLite locks). Stop the pod (`kubectl scale deployment bifrost --replicas=0`) first, if you must touch these.
-- The empty `data/logs/` dir is required and should remain writable; do not delete it on a live host or log ingestion breaks for the gateway container (container runs as its configured user and cannot recreate root-owned dirs on a Mac Studio hostPath).
-
----
-
-## Prerequisites
-
-1. **Mac Studio**, macOS, with [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/) + a Kind cluster named `kind` (this is what backs the cluster IP that resolves to service bifrost locally).
-2. This repository uses the default Kubernetes namespace — no manual pre-creation required, but ensure your Kind kubelet can write `/mnt/workspaces/bifrost/data`. (If Kind storage mapping is non-default on your machine, seed that directory first or change the hostPath accordingly.)
-3. A backend service such as **Ollama** is running somewhere reachable from inside the cluster — whether via `--add-host`, a separate Ollama deployment on the cluster network under a DNS-resolvable name, an internal LoadBalancer IP for an external box hosting Ollama, or via a `hostPort`. The gateway itself does not expose its backend target endpoint as a service definition here. (No environment variable configuring it yet.)
-4. Recommended: nginx Ingress controller installed on Kind (`ingressClassName: nginx`) if you want to reach the ingress object included below; otherwise port-forward 8080 from the deployment is sufficient for testing.
-
----
-
-## Deployment Guide
-
-Apply everything in one step — this creates `Deployment`, `Service`, and `Ingress`:
+This creates the Deployment, Service, and Ingress in the current kubectl namespace (default):
 
 ```bash
 kubectl apply -f k8s/bifrost-deployment.yaml
 ```
 
-Wait for rollout (image pull + readiness on an otherwise unsignaled port):
+### 3. Wait for rollout
 
 ```bash
 kubectl rollout status deployment/bifrost --timeout=90s
 ```
 
-If you expect the service to have a reachable DNS hostname inside of `default` across namespaces, verify:
+### 4. Verify the gateway answers
+
+No backend is needed for this — it only confirms Bifrost responds:
 
 ```bash
-kubectl get svc bifrost          # expects ClusterIP with port 8080 -> targetPort 8080 matching lines 54–56 above
-```
-
----
-
-## API Integration & Usage
-
-From anywhere inside the cluster (or via `nginx` ingress on host `bifrost.localhost`), call the OpenAI-compatible surface:
-
-- **Internal K8s base URL:** `http://bifrost.default.svc.cluster.local:8080/v1`  
-    (the short DNS form is sufficient from any pod in the default namespace)
-- Port always `8080`; ingress host alias `bifrost.localhost`.
-
-Verify reachability; these do not require the backend to succeed, only that Bifrost answers:
-
-```bash
-kubectl run -i --rm debug-bifrost \
-    --image=curlimages/curl --restart=Never -- \
+kubectl run -i --rm debug-bifrost --image=curlimages/curl --restart=Never -- \
   sh -c 'curl -fsS http://bifrost.default.svc.cluster.local:8080/v1/models'
 ```
 
-Example response shape you should see (`/v1/models`; note the proxy schema follows OpenAI exactly):
+## Usage
+
+Base URL inside the cluster: `http://bifrost.default.svc.cluster.local:8080/v1` (ingress host: `bifrost.localhost`).
+
+### List available models
+
+```bash
+curl -fsS http://bifrost.default.svc.cluster.local:8080/v1/models
+```
+
+Response shape:
 
 ```json
 { "object": "list", "data": [ /* backend-specific entries */ ] }
 ```
 
-For a chat request, POST to `/v1/chat/completions` per your internal model name(s) returned by the previous call; example minimal body:
+### Chat completion
 
 ```bash
 curl -fsSL http://bifrost.default.svc.cluster.local:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "<exact identifier from /v1/models>",
-    "messages": [ {"role":"user","content":"What is the capital of Finland?"} ]
+    "messages": [ {"role": "user", "content": "What is the capital of Finland?"} ]
   }'
 ```
 
-(There are currently no environment variables, keys, or per-backend credentials in `bifrost-deployment.yaml`; authentication and backend URL configuration will be added under `containers[].env` (or via a referenced Secret) before exposing any protected route. At the moment `/v1/*` is served directly from the image defaults.)
-
----
-
-## Monitoring & Troubleshooting
-
-Read what you need to survive an outage:
+### Local check without the ingress host
 
 ```bash
-kubectl logs -f deployment/bifrost          # primary, stream of last-minute requests/errors
-kubectl describe deploy bifrost              # for pod placement, restart reasons
-kubectl describe svc  bifrost                # confirm port mapping (8080 -> 8080) lines up with your caller expectations
-kubectl get ingress                          # confirms host/path matches /v1 traffic rules, line-by-line to manifest file above.
+kubectl port-forward svc/bifrost 8080:8080 & curl -s http://localhost:8080/v1/models
 ```
 
-To force a clean reschedule (e.g., after adjusting the `hostPath`):
+## Architecture
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px'}}}%%
+flowchart LR
+    subgraph Clients["Clients"]
+        A[Open WebUI]
+        B[OpenCode / Agents]
+        C[IDE Integrations]
+    end
+
+    subgraph Cluster["Kind Cluster (default ns)"]
+        D[Bifrost Gateway<br/>maximhq/bifrost :8080]
+        E[(SQLite<br/>config.db / logs.db)]
+    end
+
+    subgraph Backends["Backends"]
+        F[Ollama<br/>Local models]
+        G[Cloud Providers]
+    end
+
+    A --> D
+    B --> D
+    C --> D
+    D --> E
+    D --> F
+    D --> G
+
+    classDef client fill:#3B82F6,stroke:#2563EB,color:#fff,stroke-width:2px
+    classDef gateway fill:#F59E0B,stroke:#D97706,color:#fff,stroke-width:2px
+    classDef data fill:#8B5CF6,stroke:#7C3AED,color:#fff,stroke-width:2px
+    classDef service fill:#10B981,stroke:#059669,color:#fff,stroke-width:2px
+
+    class A,B,C client
+    class D gateway
+    class E data
+    class F,G service
+```
+
+## Configuration
+
+Runtime values are defined in `k8s/bifrost-deployment.yaml`, the single source of truth:
+
+| Setting | Value |
+|---|---|
+| Image | `maximhq/bifrost:latest` |
+| Container port | `http` on `8080` |
+| Service | ClusterIP, `port: 8080`, `targetPort: 8080` |
+| Replicas | 1 |
+| Resource requests | `200m` CPU / `512Mi` memory |
+| Resource limits | `2` CPU / `2048Mi` memory |
+| Data mount | `volumeMounts: /app/data` → `hostPath: /mnt/workspaces/bifrost/data` |
+| Ingress host | `bifrost.localhost` (nginx) |
+
+No environment variables or secrets are configured yet. Backend URLs and credentials will be added under `containers[].env` or a referenced Secret (see `k8s/*-secret.yaml`, gitignored) before exposing protected routes.
+
+## API
+
+Endpoints follow the OpenAI API schema:
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| GET | `/v1/models` | List available models | None configured |
+| POST | `/v1/chat/completions` | Send a chat completion request | None configured |
+
+## Project Structure
+
+```
+bifrost/
+├── .gitignore                  # ignores data/, k8s/*-secret.yaml, *.log
+├── AGENTS.md                   # agent/operator constraints and gotchas
+├── LICENSE                     # MIT license
+├── README.md
+├── data/                       # runtime SQLite + logs (gitignored, hostPath-backed)
+│   └── logs/                   # must stay writable for gateway log output
+└── k8s/                        # Kubernetes manifests
+    └── bifrost-deployment.yaml # Deployment, Service, Ingress
+```
+
+## Tech Stack
+
+### Infrastructure
+
+| Technology | Purpose |
+|---|---|
+| Kubernetes (Kind) | Cluster runtime; default namespace |
+| Docker | Container image `maximhq/bifrost` |
+| Nginx Ingress | External host `bifrost.localhost` routing |
+| SQLite | Persistent config and logs on the node hostPath |
+| Ollama | Local model backend on the Mac Studio host |
+| Langfuse | Async request tracing |
+
+## Deployment
+
+Apply or update all resources in one step:
+
+```bash
+kubectl apply -f k8s/bifrost-deployment.yaml
+```
+
+Verify the Service mapping:
+
+```bash
+kubectl get svc bifrost          # ClusterIP, port 8080 -> targetPort 8080
+```
+
+Restart the pod after hostPath changes:
+
 ```bash
 kubectl rollout restart deployment/bifrost && \
   kubectl rollout status deployment/bifrost --timeout=90s
 ```
 
-Health posture in today’s manifest is sparse — **no** readiness/liveness probes are defined (see the k8s file: under container spec there are only `ports` entry and not probes field which would appear here), so Kubernetes will mark a stuck pod as healthy until you remove it. Add explicit `/health` probes when you cut over to production traffic; nothing in this repo wires them yet.
+Operational notes:
 
----
+- SQLite files in `data/` are locked by the running pod. Stop the pod first (`kubectl scale deployment bifrost --replicas=0`) before inspecting them.
+- `logs.db` grows unbounded on the host disk. Prune it from `/mnt/workspaces/bifrost/data` when node free space is low, then restart the pod.
+- No readiness/liveness probes are defined; add explicit probes before production traffic.
 
-## Operational Gotchas (agent-facing, non-obvious)
+## Contributing
 
-- `.db*` files referenced at `data/` on Mac Studio hosts correspond to the container’s `/app/data`, but **no** test or build artifact here contains the real content once deleted — they are regenerated by runtime state and never committed (`git status` after any restart may show them as untracked, which is expected).
-- To inspect a user-facing request path end-to-end locally without touching `bifrost.localhost`, port-forward:
-  ```bash
-  kubectl port-forward svc/bifrost 8080:8080 & curl http://localhost:8080/v1/models
-  ```
-- Changing the container image via Bifrost upstream requires changing `image:` (currently pinned at :latest), plus updating this README and any ingress/port mappings that reference the previous behavior.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-change`)
+3. Commit your changes (`git commit -m 'feat: add feature'`)
+4. Push to the branch (`git push origin feature/my-change`)
+5. Open a Pull Request
 
-See [`AGENTS.md`](./AGENTS.md) for additional agent-specific cautions, including disk-space escalation patterns where data/*.db* growth can preempt node limits faster than pod autoscaling triggers.
+## License
+
+[MIT](LICENSE)
