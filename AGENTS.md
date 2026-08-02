@@ -1,35 +1,44 @@
 # AGENTS.md
 
-This is a local workspace for **Bifrost** (a MaxKB-style proxy service). The repository ships no source code, build scripts, or tests — it contains only generated runtime data and a Kubernetes deployment manifest.
+This workspace ships **no application code**: only `k8s/` manifests and generated runtime data under `data/`. No build/lint/test/typecheck/Package.json exists (npm/go/make do nothing here). Bifrost is a MaxKB-style OpenAI-compatible proxy on a Kind cluster; config + logs persist to SQLite files mounted via hostPath.
 
 ## Layout
+- `k8s/bifrost-deployment.yaml` — single source of truth: Service (`port`/`targetPort 8080`), Deployment (image `maximhq/bifrost:latest`, 1 replica), Ingress (`bifrost.localhost`). No namespace is declared in this file; resources land in whatever namespace the kubectl context targets.
+- `data/` — ignored by `.gitignore`; holds runtime SQLite: `config.db` (~26 MB) + WAL/SHM sidecars; `logs.db` (currently ~189 MB on host); and a kept `logs/` dir. All state is on each cluster node, not in this repo.
+- `.gitignore` — ignores `data/`, `k8s/*-secret.yaml`, `*.log`.
 
-- `data/` — generated at runtime; SQLite files (`config.db`, `logs.db`) plus `-wal`/`-shm` sidecars. **Never edit by hand while the service is running.**
-  - `.gitignore` ignores everything under `data/`, so DB changes are not tracked and will be lost on redeploy.
-  - The empty `data/logs/` directory (owned by `root:root`, mode `0755`) must remain an accessible directory for log output.
-- `k8s/bifrost-deployment.yaml` — single Deployment + Service + Ingress in the `furseal` namespace; container port **8080**, image `maximhq/bifrost:latest`.
-
-## Data path mapping (important)
-
-The container mounts a hostPath volume:
-
+## HostPath mapping (critical)
+Container mounts `/app/data`; host directory is created by Kubernetes at:
 ```yaml
-volumeMounts: [{name: bifrost-data, mountPath: /app/data}]
-volumes:  [{name: bifrost-data, hostPath: {path: "/mnt/workspaces/bifrost/data", type: DirectoryOrCreate}}]
+volumes: [{name: bifrost-data, hostPath: {path: /mnt/workspaces/bifrost/data, type: DirectoryOrCreate}}]
+```
+- **New Kind nodes will not have this path populated.** Pre-seed/create `/mnt/workspaces/bifrost/data` before first `kubectl apply`, otherwise the gateway pod has no place to write config/logs.
+- Back up from `/mnt/workspaces/bifrost/data` on each host — never here (deleted files are runtime-generated only).
+
+## Deploy flow (default namespace unless your kubectl context overrides)
+```bash
+kubectl apply -f k8s/bifrost-deployment.yaml         # creates Service + Deployment + Ingress
+# wait for the Deployment to come up:
+kubectl rollout status deployment/bifrost --timeout=90s
+```
+Changing the Service `port`/`targetPort` requires updating the Ingress `service.port.number` and container `containerPort`/`name: http` together.
+
+## Safe test/verification commands
+```bash
+# Reach gateway in-cluster (no backend needed to confirm Bifrost answers):
+kubectl run -i --rm debug-bifrost --image=curlimages/curl --restart=Never -- \
+  sh -c 'curl -fsS http://bifrost.default.svc.cluster.local:8080/v1/models'
+
+# Local check without touching ingress host:
+kubectl port-forward svc/bifrost 8080:8080 & curl -s http://localhost:8080/v1/models
 ```
 
-- A new cluster node will not have `/mnt/workspaces/bifrost/data` populated. Either pre-seed that path or create the directory before first `kubectl apply`.
-- All persisted state (config + logs) lives under `/mnt/workspaces/biftrast...`/`data` on each host — back it up there, **not** from inside this repo.
+## Data hygiene (where agents get paged)
+- SQLite: `data/*.db*` are locked by the running pod. Inspect them only with the pod scaled to zero, or copy out first via `kubectl cp` — do not open `-wal`/`-shm` while live.
+- Growth: `logs.db` grows unbounded on host disk (`/mnt/workspaces/bifrost`); if a node's free space is low after changes, prune it from `/mnt/workspaces/bifrost/data/logs*` (not here) and restart the pod — no in-repo tool tracks this.
 
-## What to change and how
+## Environment / secrets
+None present yet. To add backend URL/env vars: edit `containers[].env` and apply; reference a Secret under `k8s/*-secret.yaml` (gitignored). Do **not** expect a `.env` loader — none exists in the image or manifest.
 
-| Need | Where | Notes |
-|------|-------|-------|
-| Deploy changes   | `k8s/bifrost-deployment.yaml` then `kubectl apply -f k8s/` | Image tag is `:latest`; pin a digest if you need reproducibility instead of the moving tag. |
-| Change port      | container + readiness/liveness probes (none defined) and the Service `port`/`targetPort`. The Ingress assumes 8080 — update it too. |
-| Environment vars / secrets | not present yet — add under `containers[].env` or a referenced Secret. No `.env` file is loaded by this repo alone; this repo does **not** contain app code to edit. |
-
-## Gotchas for agents
-
-- There are no tests, lint, typecheck, build, or package manifests in this workspace. Commands like `npm install`, `go test`, or `make dev` do nothing here.
-- `data/*.db*` grow unbounded; a large workspace may exhaust disk on the node before hitting project limits. Watch `/mnt/workspaces/bifrost` free space.
+## Conventions that differ from defaults
+No readiness/liveness probes are defined, so Kubernetes reports an unhealthy container as healthy until it exits. Add explicit probes before production traffic (there is no existing health endpoint wired here).
