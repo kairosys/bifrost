@@ -116,7 +116,15 @@ kubectl port-forward svc/bifrost 8080:8080 & curl -s http://localhost:8080/v1/mo
 ## Architecture
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px'}}}%%
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'fontSize': '14px',
+    'darkMode': true,
+    'lineColor': '#8B949E',
+    'textColor': '#E6EDF3'
+  }
+}}%%
 flowchart LR
     subgraph Clients["Clients"]
         A[Open WebUI]
