@@ -3,9 +3,9 @@
 This workspace ships **no application code**: only `k8s/` manifests and generated runtime data under `data/`. No build/lint/test/typecheck/Package.json exists (npm/go/make do nothing here). Bifrost is a MaxKB-style OpenAI-compatible proxy on a Kind cluster; config + logs persist to SQLite files mounted via hostPath.
 
 ## Layout
-- `k8s/bifrost-deployment.yaml` — single source of truth: Service (`port`/`targetPort 8080`), Deployment (image `maximhq/bifrost:latest`, 1 replica), Ingress (`bifrost.localhost`). No namespace is declared in this file; resources land in whatever namespace the kubectl context targets.
-- `data/` — ignored by `.gitignore`; holds runtime SQLite: `config.db` (~26 MB) + WAL/SHM sidecars; `logs.db` (currently ~189 MB on host); and a kept `logs/` dir. All state is on each cluster node, not in this repo.
-- `.gitignore` — ignores `data/`, `k8s/*-secret.yaml`, `*.log`.
+- `k8s/bifrost-deployment.yaml` — single source of truth: Service (`port`/`targetPort 8080`), Deployment (image `maximhq/bifrost:latest`, 1 replica), Ingress (`bifrost.localhost`, nginx with `proxy-body-size: 50m` and 600s read/send/connect timeouts for large streaming requests). No namespace is declared in this file; resources land in whatever namespace the kubectl context targets.
+- `data/` — ignored by `.gitignore`; holds runtime SQLite: `config.db` (~26 MB) + WAL/SHM sidecars; `logs.db` (grows unbounded, already ~600 MB on host); and a kept `logs/` dir. All state is on each cluster node, not in this repo.
+- `.gitignore` — ignores `data/`, `k8s/*-secret.yaml`, `k8s/*-external-ingress.yaml`, `.DS_Store`, `*.log`. Name any Secret or external-ingress manifest under `k8s/` with the matching suffix so it stays out of git.
 
 ## HostPath mapping (critical)
 Container mounts `/app/data`; host directory is created by Kubernetes at:

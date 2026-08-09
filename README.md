@@ -11,20 +11,19 @@
 </p>
 
 <p align="center">
-  <a href="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white"><img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white" alt="Kubernetes" /></a>
-  <a href="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" /></a>
-  <a href="https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white"><img src="https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white" alt="Nginx" /></a>
-  <a href="https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white"><img src="https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white" alt="SQLite" /></a>
-  <a href="https://img.shields.io/badge/OpenAI--compatible-412991?style=flat&logo=openai&logoColor=white"><img src="https://img.shields.io/badge/OpenAI--compatible-412991?style=flat&logo=openai&logoColor=white" alt="OpenAI-compatible" /></a>
+  <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat&logo=claude&logoColor=white" alt="Claude Code" /></a>
+  <a href="https://github.com/features/copilot"><img src="https://img.shields.io/badge/GitHub_Copilot-000000?style=flat&logo=github&logoColor=white" alt="GitHub Copilot" /></a>
+  <a href="https://cursor.sh"><img src="https://img.shields.io/badge/Cursor-000000?style=flat&logo=cursor&logoColor=white" alt="Cursor" /></a>
 </p>
 
 <p align="center">
-  <a href="https://img.shields.io/badge/Claude_Code-D97757?style=flat&logo=claude&logoColor=white"><img src="https://img.shields.io/badge/Claude_Code-D97757?style=flat&logo=claude&logoColor=white" alt="Claude Code" /></a>
-  <a href="https://img.shields.io/badge/GitHub_Copilot-000000?style=flat&logo=github&logoColor=white"><img src="https://img.shields.io/badge/GitHub_Copilot-000000?style=flat&logo=github&logoColor=white" alt="GitHub Copilot" /></a>
-  <a href="https://img.shields.io/badge/Cursor-000000?style=flat&logo=cursor&logoColor=white"><img src="https://img.shields.io/badge/Cursor-000000?style=flat&logo=cursor&logoColor=white" alt="Cursor" /></a>
+  <img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white" alt="Kubernetes" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white" alt="Nginx" />
+  <img src="https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white" alt="OpenAI" />
+  <img src="https://img.shields.io/badge/Ollama-000000?style=flat&logo=ollama&logoColor=white" alt="Ollama" />
 </p>
-
----
 
 Bifrost is the central AI traffic gateway for this workspace. It sits at the front of the stack on a Kind Kubernetes cluster, intercepts LLM API calls from every client — Open WebUI, OpenCode, programmatic agents, and IDEs — and routes them to one or more backends, including local models (e.g. Ollama on the host) and cloud model providers.
 
@@ -49,7 +48,7 @@ This repository ships no application code. It contains only the Kubernetes manif
 - A reachable model backend (e.g. Ollama running on the host, reachable from inside the cluster)
 - Optional: nginx Ingress controller installed on the cluster for the `bifrost.localhost` host
 
-### 1. Pre-seed the hostPath directory
+### Pre-seed the hostPath directory
 
 The pod mounts `/app/data` from the node path `/mnt/workspaces/bifrost/data`. New Kind nodes will not have this path — create it before applying, otherwise the gateway has nowhere to write config and logs:
 
@@ -57,7 +56,7 @@ The pod mounts `/app/data` from the node path `/mnt/workspaces/bifrost/data`. Ne
 mkdir -p /mnt/workspaces/bifrost/data/logs
 ```
 
-### 2. Apply the manifest
+### Apply the manifest
 
 This creates the Deployment, Service, and Ingress in the current kubectl namespace (default):
 
@@ -65,13 +64,13 @@ This creates the Deployment, Service, and Ingress in the current kubectl namespa
 kubectl apply -f k8s/bifrost-deployment.yaml
 ```
 
-### 3. Wait for rollout
+### Wait for rollout
 
 ```bash
 kubectl rollout status deployment/bifrost --timeout=90s
 ```
 
-### 4. Verify the gateway answers
+### Verify the gateway answers
 
 No backend is needed for this — it only confirms Bifrost responds:
 
@@ -173,9 +172,10 @@ Runtime values are defined in `k8s/bifrost-deployment.yaml`, the single source o
 | Resource requests | `200m` CPU / `512Mi` memory |
 | Resource limits | `2` CPU / `2048Mi` memory |
 | Data mount | `volumeMounts: /app/data` → `hostPath: /mnt/workspaces/bifrost/data` |
-| Ingress host | `bifrost.localhost` (nginx) |
+| Ingress host | `bifrost.localhost` (nginx, `proxy-body-size: 50m`, 600s read/send/connect timeouts) |
+| Environment | `TZ: Asia/Hong_Kong` (container timezone) |
 
-No environment variables or secrets are configured yet. Backend URLs and credentials will be added under `containers[].env` or a referenced Secret (see `k8s/*-secret.yaml`, gitignored) before exposing protected routes.
+No secrets are configured yet. Backend URLs and credentials will be added under `containers[].env` or a referenced Secret (see `k8s/*-secret.yaml`, gitignored) before exposing protected routes.
 
 ## API
 
@@ -190,7 +190,7 @@ Endpoints follow the OpenAI API schema:
 
 ```
 bifrost/
-├── .gitignore                  # ignores data/, k8s/*-secret.yaml, *.log
+├── .gitignore                  # ignores data/, k8s/*-secret.yaml, k8s/*-external-ingress.yaml, *.log
 ├── AGENTS.md                   # agent/operator constraints and gotchas
 ├── LICENSE                     # MIT license
 ├── README.md
@@ -251,3 +251,5 @@ Operational notes:
 ## License
 
 [MIT](LICENSE)
+
+<!-- BEAUTIFIED -->

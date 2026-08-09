@@ -33,6 +33,9 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          env:
+            - name: TZ
+              value: "Asia/Hong_Kong"
           resources:
             requests:
               cpu: "200m"
@@ -55,6 +58,9 @@ metadata:
   name: bifrost
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
 spec:
   ingressClassName: nginx
   rules:

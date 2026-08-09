@@ -1,5 +1,6 @@
 data/
 k8s/*-secret.yaml
+k8s/*-external-ingress.yaml
 .DS_Store
 *.log
 
