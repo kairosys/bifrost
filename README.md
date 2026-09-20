@@ -170,7 +170,7 @@ Runtime values are defined in `k8s/bifrost-deployment.yaml`, the single source o
 | Service | ClusterIP, `port: 8080`, `targetPort: 8080` |
 | Replicas | 1 |
 | Resource requests | `200m` CPU / `256Mi` memory |
-| Resource limits | `2` CPU / `512Gi` memory |
+| Resource limits | `2` CPU / `512Mi` memory |
 | Data mount | `volumeMounts: /app/data` → `hostPath: /mnt/workspaces/bifrost/data` |
 | Ingress host | `bifrost.localhost` (nginx, `proxy-body-size: 50m`, 600s read/send/connect timeouts) |
 | Environment | `TZ: Asia/Hong_Kong` (container timezone) |

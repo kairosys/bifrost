@@ -42,7 +42,7 @@ spec:
               memory: "256Mi"
             limits:
               cpu: "2"
-              memory: "512Gi"
+              memory: "512Mi"
           volumeMounts:
             - name: bifrost-data
               mountPath: /app/data
