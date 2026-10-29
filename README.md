@@ -29,6 +29,34 @@ Bifrost is the central AI traffic gateway for this workspace. It sits at the fro
 
 This repository ships no application code. It contains only the Kubernetes manifest that runs the `maximhq/bifrost` gateway image plus generated runtime data. See [`AGENTS.md`](./AGENTS.md) for the agent/operator constraints that apply to this workspace.
 
+<!-- AUTO-GENERATED -->
+## Current deployment and dashboard setup
+
+The deployment now uses `maximhq/bifrost:v2.3.2` and reads `BIFROST_SETUP_TOKEN` from the `BIFROST_SETUP_TOKEN` key of the Kubernetes Secret `bifrost-secret`. This supersedes the older image and secret information in the Configuration section below.
+
+Before applying the deployment, create `bifrost-secret` in the target namespace. If you have the gitignored `k8s/bifrost-secret.yaml` for this environment, apply it first:
+
+```bash
+kubectl apply -f k8s/bifrost-secret.yaml
+kubectl apply -f k8s/bifrost-deployment.yaml
+kubectl rollout status deployment/bifrost --timeout=90s
+```
+
+On a new installation without that file, create the Secret with a randomly generated token:
+
+```bash
+kubectl create secret generic bifrost-secret \
+  --from-literal=BIFROST_SETUP_TOKEN="$(openssl rand -hex 32)"
+```
+
+When dashboard authentication is not configured, the management API is locked until you enter the setup token. Open [bifrost.localhost/login](http://bifrost.localhost/login), enter the decoded token, and create an admin account. On macOS, copy the token from the current namespace to the clipboard with:
+
+```bash
+kubectl get secret bifrost-secret -o jsonpath='{.data.BIFROST_SETUP_TOKEN}' | base64 --decode | pbcopy
+```
+
+Values in a Secret manifest's `data` field are Base64-encoded; paste the decoded token into the dashboard. Keep the Secret manifest private and out of version control.
+
 ## Features
 
 | Feature | Description |
