@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: bifrost
-          image: maximhq/bifrost:latest
+          image: maximhq/bifrost:v2.3.2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -36,6 +36,11 @@ spec:
           env:
             - name: TZ
               value: "Asia/Hong_Kong"
+            - name: BIFROST_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: bifrost-secret
+                  key: BIFROST_SETUP_TOKEN
           resources:
             requests:
               cpu: "200m"
