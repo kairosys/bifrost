@@ -18,6 +18,8 @@ metadata:
     app: bifrost
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: bifrost
@@ -28,11 +30,24 @@ spec:
     spec:
       containers:
         - name: bifrost
-          image: maximhq/bifrost:v2.3.2
+          image: maximhq/bifrost:v2.4.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           env:
             - name: TZ
               value: "Asia/Hong_Kong"
@@ -64,8 +79,8 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
 spec:
   ingressClassName: nginx
   rules:

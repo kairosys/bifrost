@@ -32,7 +32,7 @@ This repository ships no application code. It contains only the Kubernetes manif
 <!-- AUTO-GENERATED -->
 ## Current deployment and dashboard setup
 
-The deployment now uses `maximhq/bifrost:v2.3.2` and reads `BIFROST_SETUP_TOKEN` from the `BIFROST_SETUP_TOKEN` key of the Kubernetes Secret `bifrost-secret`. This supersedes the older image and secret information in the Configuration section below.
+The deployment now uses `maximhq/bifrost:v2.4.0` and reads `BIFROST_SETUP_TOKEN` from the `BIFROST_SETUP_TOKEN` key of the Kubernetes Secret `bifrost-secret`. This supersedes the older image and secret information in the Configuration section below.
 
 Before applying the deployment, create `bifrost-secret` in the target namespace. If you have the gitignored `k8s/bifrost-secret.yaml` for this environment, apply it first:
 
@@ -193,14 +193,14 @@ Runtime values are defined in `k8s/bifrost-deployment.yaml`, the single source o
 
 | Setting | Value |
 |---|---|
-| Image | `maximhq/bifrost:latest` |
+| Image | `maximhq/bifrost:v2.4.0` |
 | Container port | `http` on `8080` |
 | Service | ClusterIP, `port: 8080`, `targetPort: 8080` |
 | Replicas | 1 |
 | Resource requests | `200m` CPU / `256Mi` memory |
 | Resource limits | `2` CPU / `512Mi` memory |
 | Data mount | `volumeMounts: /app/data` → `hostPath: /mnt/workspaces/bifrost/data` |
-| Ingress host | `bifrost.localhost` (nginx, `proxy-body-size: 50m`, 600s read/send/connect timeouts) |
+| Ingress host | `bifrost.localhost` (nginx, `proxy-body-size: 50m`, 600s read, 60s send, 5s connect timeouts) |
 | Environment | `TZ: Asia/Hong_Kong` (container timezone) |
 
 No secrets are configured yet. Backend URLs and credentials will be added under `containers[].env` or a referenced Secret (see `k8s/*-secret.yaml`, gitignored) before exposing protected routes.
@@ -266,7 +266,8 @@ Operational notes:
 
 - SQLite files in `data/` are locked by the running pod. Stop the pod first (`kubectl scale deployment bifrost --replicas=0`) before inspecting them.
 - `logs.db` grows unbounded on the host disk. Prune it from `/mnt/workspaces/bifrost/data` when node free space is low, then restart the pod.
-- No readiness/liveness probes are defined; add explicit probes before production traffic.
+- Startup and readiness probes check `/health`; no liveness probe is configured.
+- Deployment updates use the `Recreate` strategy, causing brief downtime while preventing normal rollout overlap against SQLite.
 
 ## Contributing
 
