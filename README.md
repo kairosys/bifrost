@@ -32,7 +32,7 @@ This repository ships no application code. It contains only the Kubernetes manif
 <!-- AUTO-GENERATED -->
 ## Current deployment and dashboard setup
 
-The deployment now uses `maximhq/bifrost:v2.4.0` and reads `BIFROST_SETUP_TOKEN` from the `BIFROST_SETUP_TOKEN` key of the Kubernetes Secret `bifrost-secret`. This supersedes the older image and secret information in the Configuration section below.
+The deployment now uses `maximhq/bifrost:v2.5.1` and reads `BIFROST_SETUP_TOKEN` from the `BIFROST_SETUP_TOKEN` key of the Kubernetes Secret `bifrost-secret`. This supersedes the older image and secret information in the Configuration section below.
 
 Before applying the deployment, create `bifrost-secret` in the target namespace. If you have the gitignored `k8s/bifrost-secret.yaml` for this environment, apply it first:
 
@@ -193,7 +193,7 @@ Runtime values are defined in `k8s/bifrost-deployment.yaml`, the single source o
 
 | Setting | Value |
 |---|---|
-| Image | `maximhq/bifrost:v2.4.0` |
+| Image | `maximhq/bifrost:v2.5.1` |
 | Container port | `http` on `8080` |
 | Service | ClusterIP, `port: 8080`, `targetPort: 8080` |
 | Replicas | 1 |
